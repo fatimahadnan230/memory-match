@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pastel Memory Match</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap');
+        body { font-family: 'Quicksand', sans-serif; }
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Game Container -->
+    <div class="bg-white/80 backdrop-blur-md border border-white shadow-2xl rounded-3xl p-6 sm:p-8 max-w-xl w-full text-center">
+        <header class="mb-6">
+            <span class="bg-pink-100 text-pink-600 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Game Development Society</span>
+            <h1 class="text-3xl font-bold text-gray-700 mt-2">✨ Pastel Memory Match ✨</h1>
+            <p class="text-gray-500 text-sm mt-1">Match the cute pairs before time runs out!</p>
+        </header>
+
+        <!-- Level Selector -->
+        <div class="flex justify-center gap-2 mb-6">
+            <button onclick="setDifficulty('easy')" id="btn-easy" class="px-4 py-1.5 rounded-full text-sm font-semibold transition-all bg-pink-500 text-white shadow-md">Easy</button>
+            <button onclick="setDifficulty('medium')" id="btn-medium" class="px-4 py-1.5 rounded-full text-sm font-semibold transition-all bg-pink-100 text-pink-600 hover:bg-pink-200">Medium</button>
+            <button onclick="setDifficulty('hard')" id="btn-hard" class="px-4 py-1.5 rounded-full text-sm font-semibold transition-all bg-pink-100 text-pink-600 hover:bg-pink-200">Hard</button>
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="flex justify-around items-center bg-purple-50/50 border border-purple-100 rounded-2xl p-4 mb-6 text-gray-700 font-semibold text-sm">
+            <div>Moves: <span id="moves" class="text-pink-500 font-bold">0</span></div>
+            <div>Time: <span id="timer" class="text-purple-500 font-bold">0s</span></div>
+            <div>Pairs: <span id="matches" class="text-indigo-500 font-bold">0</span>/<span id="total-pairs">4</span></div>
+        </div>
+
+        <!-- Game Grid -->
+        <div id="grid" class="grid grid-cols-4 gap-3 sm:gap-4 mb-6 perspective-1000">
+            <!-- Cards injected via JS -->
+        </div>
+
+        <!-- Controls -->
+        <button onclick="startGame()" class="w-full bg-gradient-to-r from-pink-400 to-purple-400 hover:from-pink-500 hover:to-purple-500 text-white font-bold py-3 rounded-2xl shadow-lg transition-all transform active:scale-95">
+            🔄 Restart Game
+        </button>
+    </div>
+
+    <!-- Victory Modal -->
+    <div id="modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl transform transition-all animate-bounce-short">
+            <div class="text-5xl mb-3">🎉</div>
+            <h2 class="text-2xl font-bold text-gray-800">You Won!</h2>
+            <p id="modal-text" class="text-gray-500 text-sm mt-2 mb-6">You matched all the pairs successfully!</p>
+            <button onclick="closeModal(); startGame();" class="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 rounded-2xl shadow-md transition-all">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const cardPool = [
+            { id: 'boba', icon: '🧋', name: 'Boba' },
+            { id: 'bunny', icon: '🐰', name: 'Bunny' },
+            { id: 'kitty', icon: '🐱', name: 'Kitty' },
+            { id: 'star', icon: '⭐', name: 'Star' },
+            { id: 'cake', icon: '🎂', name: 'Cake' },
+            { id: 'teddy', icon: '🧸', name: 'Teddy' },
+            { id: 'flower', icon: '🌸', name: 'Flower' },
+            { id: 'gamepad', icon: '🎮', name: 'Gamepad' }
+        ];
+
+        let currentDifficulty = 'easy';
+        let cards = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let totalPairs = 4;
+        let moves = 0;
+        let timer = 0;
+        let timerInterval = null;
+        let isLocked = false;
+
+        function setDifficulty(level) {
+            currentDifficulty = level;
+            ['easy', 'medium', 'hard'].forEach(l => {
+                const btn = document.getElementById(`btn-${l}`);
+                if (l === level) {
+                    btn.className = "px-4 py-1.5 rounded-full text-sm font-semibold transition-all bg-pink-500 text-white shadow-md";
+                } else {
+                    btn.className = "px-4 py-1.5 rounded-full text-sm font-semibold transition-all bg-pink-100 text-pink-600 hover:bg-pink-200";
+                }
+            });
+
+            if (level === 'easy') totalPairs = 4;
+            if (level === 'medium') totalPairs = 6;
+            if (level === 'hard') totalPairs = 8;
+
+            document.getElementById('total-pairs').innerText = totalPairs;
+            
+            const grid = document.getElementById('grid');
+            if (level === 'easy') grid.className = "grid grid-cols-4 gap-3 sm:gap-4 mb-6 perspective-1000";
+            if (level === 'medium') grid.className = "grid grid-cols-4 gap-3 sm:gap-4 mb-6 perspective-1000";
+            if (level === 'hard') grid.className = "grid grid-cols-4 gap-4 mb-6 perspective-1000";
+
+            startGame();
+        }
+
+        function playSound(type) {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                if (type === 'flip') {
+                    osc.frequency.setValueAtTime(400, ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.08);
+                    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.08);
+                } else if (type === 'match') {
+                    osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+                    osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
+                    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.2);
+                } else if (type === 'win') {
+                    [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                        const o = ctx.createOscillator();
+                        const g = ctx.createGain();
+                        o.connect(g);
+                        g.connect(ctx.destination);
+                        o.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1);
+                        g.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.1);
+                        g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.1 + 0.2);
+                        o.start(ctx.currentTime + i * 0.1);
+                        o.stop(ctx.currentTime + i * 0.1 + 0.2);
+                    });
+                }
+            } catch (e) {}
+        }
+
+        function startGame() {
+            clearInterval(timerInterval);
+            timer = 0;
+            moves = 0;
+            matchedPairs = 0;
+            isLocked = false;
+            flippedCards = [];
+            document.getElementById('timer').innerText = '0s';
+            document.getElementById('moves').innerText = '0';
+            document.getElementById('matches').innerText = '0';
+
+            const selectedPool = [...cardPool].sort(() => 0.5 - Math.random()).slice(0, totalPairs);
+            cards = [...selectedPool, ...selectedPool]
+                .sort(() => 0.5 - Math.random())
+                .map((card, index) => ({ ...card, uniqueId: index }));
+
+            renderGrid();
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            cards.forEach((card, index) => {
+                const cardEl = document.createElement('div');
+                cardEl.className = `aspect-square cursor-pointer perspective-1000`;
+                cardEl.innerHTML = `
+                    <div id="card-${index}" class="relative w-full h-full duration-300 transform-style-3d shadow-md rounded-2xl">
+                        <div class="absolute inset-0 w-full h-full bg-gradient-to-br from-pink-100 to-purple-100 border-2 border-white rounded-2xl flex items-center justify-center text-2xl backface-hidden shadow-inner hover:scale-105 transition-transform">
+                            ✨
+                        </div>
+                        <div class="absolute inset-0 w-full h-full bg-white border-2 border-pink-200 rounded-2xl flex items-center justify-center text-3xl rotate-y-180 backface-hidden shadow-md">
+                            ${card.icon}
+                        </div>
+                    </div>
+                `;
+                cardEl.onclick = () => flipCard(index);
+                grid.appendChild(cardEl);
+            });
+        }
+
+        function flipCard(index) {
+            if (isLocked) return;
+            const cardInner = document.getElementById(`card-${index}`);
+            const clickedCard = cards[index];
+
+            if (cardInner.classList.contains('rotate-y-180') || flippedCards.includes(index)) return;
+
+            if (timer === 0 && moves === 0 && !timerInterval) {
+                timerInterval = setInterval(() => {
+                    timer++;
+                    document.getElementById('timer').innerText = timer + 's';
+                }, 1000);
+            }
+
+            playSound('flip');
+            cardInner.classList.add('rotate-y-180');
+            flippedCards.push(index);
+
+            if (flippedCards.length === 2) {
+                moves++;
+                document.getElementById('moves').innerText = moves;
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            isLocked = true;
+            const [firstIndex, secondIndex] = flippedCards;
+            const match = cards[firstIndex].id === cards[secondIndex].id;
+
+            if (match) {
+                matchedPairs++;
+                document.getElementById('matches').innerText = matchedPairs;
+                playSound('match');
+                flippedCards = [];
+                isLocked = false;
+
+                if (matchedPairs === totalPairs) {
+                    clearInterval(timerInterval);
+                    setTimeout(() => {
+                        playSound('win');
+                        document.getElementById('modal-text').innerText = `You completed the game in ${moves} moves and ${timer} seconds!`;
+                        document.getElementById('modal').classList.remove('hidden');
+                        document.getElementById('modal').classList.add('flex');
+                    }, 400);
+                }
+            } else {
+                setTimeout(() => {
+                    document.getElementById(`card-${firstIndex}`).classList.remove('rotate-y-180');
+                    document.getElementById(`card-${secondIndex}`).classList.remove('rotate-y-180');
+                    flippedCards = [];
+                    isLocked = false;
+                }, 800);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('modal').classList.remove('flex');
+        }
+
+        setDifficulty('easy');
+    </script>
+</body>
+</html>
